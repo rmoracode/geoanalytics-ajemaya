@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GeoAnalítica — Supervisores</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"/>
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body, html { height: 100%; margin: 0; font-family: -apple-system, system-ui, sans-serif; overflow: hidden; }
+        .tab-bar  { height: 60px; box-shadow: 0 -2px 10px rgba(0,0,0,.06); }
+        .glass    { background: rgba(255,255,255,.95); backdrop-filter: blur(10px); }
+        #map      { height: 100%; width: 100%; z-index: 1; }
+        #view-map { height: calc(100vh - 60px); }
+        .cluster-custom { background:#1e293b; border:2px solid white; border-radius:50%; color:white; font-weight:bold; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 6px rgba(0,0,0,.2); }
+        .leaflet-popup-content-wrapper { border-radius:16px; padding:0; overflow:hidden; box-shadow:0 20px 25px -5px rgba(0,0,0,.2); }
+        .leaflet-popup-content { margin:0!important; width:260px!important; }
+        .leaflet-container a.leaflet-popup-close-button { background:#ef4444!important; color:white!important; width:28px!important; height:28px!important; border-radius:8px!important; top:10px!important; right:10px!important; font-size:14px!important; display:flex!important; align-items:center!important; justify-content:center!important; }
+        .side-btn { background:white; width:50px; height:50px; border-radius:14px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(0,0,0,.12); border:1px solid #f1f5f9; transition:all .2s; color:#475569; pointer-events:auto; }
+        .side-btn:active { transform:scale(.9); }
+        .side-btn.on-heat { background:#ef4444!important; color:white!important; }
+        .side-btn.on-blue { background:#2563eb!important; color:white!important; }
+        .btn-close { background:#ef4444; width:32px; height:32px; min-width:32px; border-radius:8px; border:2px solid white; position:relative; cursor:pointer; }
+        .btn-close::before,.btn-close::after { content:''; position:absolute; width:16px; height:3px; background:white; border-radius:4px; }
+        .btn-close::before { transform:rotate(45deg); }
+        .btn-close::after  { transform:rotate(-45deg); }
+        #toast { display:none; position:fixed; top:24px; left:50%; transform:translateX(-50%); z-index:9999; background:#1e293b; color:white; padding:10px 20px; border-radius:50px; font-size:10px; font-weight:bold; }
+        /* Tabla */
+        #view-clients { height: calc(100vh - 60px); }
+        #ct table { width:100%; border-collapse:collapse; }
+        #ct thead th { position:sticky; top:0; background:white; font-size:9px; font-weight:900; text-transform:uppercase; padding:10px 8px; border-bottom:2px solid #f1f5f9; color:#94a3b8; }
+        #ct tbody td { padding:9px 8px; font-size:11px; border-bottom:1px solid #f8fafc; vertical-align:middle; }
+        .badge { display:inline-flex; align-items:center; padding:2px 7px; border-radius:9999px; font-size:9px; font-weight:900; text-transform:uppercase; }
+        .b-blue   { background:#dbeafe; color:#1d4ed8; }
+        .b-green  { background:#dcfce7; color:#15803d; }
+        .b-purple { background:#f3e8ff; color:#7e22ce; }
+        .b-orange { background:#ffedd5; color:#c2410c; }
+        .b-slate  { background:#f1f5f9; color:#475569; }
+        .no-scroll::-webkit-scrollbar { display:none; }
+    </style>
+</head>
+<body class="bg-slate-50">
+<div id="toast"></div>
+
+<!-- Loading -->
+<div id="loading" class="fixed inset-0 z-[9999] bg-slate-900/60 flex items-center justify-center backdrop-blur-sm">
+    <div class="bg-white p-6 rounded-2xl flex flex-col items-center">
+        <div class="animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent mb-2"></div>
+        <p class="text-[10px] font-bold text-slate-800 uppercase">Cargando clientes...</p>
+    </div>
+</div>
+
+<!-- ── VISTA MAPA ── -->
+<div id="view-map" class="w-full relative">
+    <!-- Panel izquierdo -->
+    <div class="absolute top-4 left-4 z-[2000] flex flex-col gap-3 pointer-events-none w-[70%] max-w-sm">
+        <div class="glass rounded-2xl px-4 py-1 flex items-center shadow-xl border border-white/40 pointer-events-auto">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 mr-2"></i>
+            <input id="map-search" type="text" placeholder="Buscar cliente..." class="bg-transparent border-none focus:ring-0 text-sm font-semibold text-slate-700 w-full h-11 outline-none">
+            <div id="btn-clear" class="hidden pl-2">
+                <div onclick="clearSearch()" class="btn-close scale-75"></div>
+            </div>
+        </div>
+        <div class="flex justify-start">
+            <div class="glass px-4 py-2 rounded-xl text-[10px] font-black uppercase text-slate-600 shadow-lg border border-white/50 flex items-center gap-2 pointer-events-auto">
+                <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></div>
+                REGISTROS: <span id="stat-total" class="text-blue-600 text-xs">0</span>
+            </div>
+        </div>
+        <div class="flex flex-col gap-2 pointer-events-auto">
+            <button onclick="map.zoomIn()" class="side-btn"><i data-lucide="plus" class="w-6 h-6"></i></button>
+            <button onclick="map.zoomOut()" class="side-btn"><i data-lucide="minus" class="w-6 h-6"></i></button>
+        </div>
+    </div>
+    <div id="map"></div>
+    <!-- Panel derecho -->
+    <div class="absolute top-4 right-4 z-[2000] flex flex-col gap-2 pointer-events-none">
+        <button onclick="toggleHeat()" id="btn-heat" class="side-btn pointer-events-auto"><i data-lucide="flame" class="w-6 h-6"></i></button>
+        <button onclick="resetView()" class="side-btn pointer-events-auto"><i data-lucide="maximize" class="w-6 h-6"></i></button>
+        <button onclick="map.locate({setView:true})" class="side-btn pointer-events-auto"><i data-lucide="navigation" class="w-6 h-6 text-blue-600"></i></button>
+        <div class="h-1"></div>
+        <button onclick="toggleLegend()" class="side-btn pointer-events-auto"><i data-lucide="layout-list" class="w-6 h-6"></i></button>
+        <button onclick="toggleFilters()" class="side-btn on-blue relative pointer-events-auto">
+            <i data-lucide="filter" class="w-6 h-6"></i>
+            <div id="filter-dot" class="hidden absolute -top-1 -right-1 w-4 h-4 bg-red-500 border-2 border-white rounded-full"></div>
+        </button>
+    </div>
+    <!-- Leyenda -->
+    <div id="legend-panel" class="fixed inset-0 z-[5000] bg-slate-900/60 hidden flex items-end">
+        <div id="legend-inner" class="bg-white w-full rounded-t-[40px] p-8 translate-y-full transition-transform duration-300 relative max-h-[80vh] flex flex-col shadow-[0_-20px_50px_rgba(0,0,0,.3)]">
+            <div onclick="toggleLegend()" class="btn-close absolute top-[-20px] right-[20px] shadow-2xl"></div>
+            <div class="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-6"></div>
+            <h3 class="text-lg font-black text-slate-900 uppercase italic mb-1">Leyenda</h3>
+            <p class="text-[10px] text-slate-400 mb-4 font-bold uppercase italic">Toca una categoría para filtrar</p>
+            <div id="legend-items" class="space-y-2 overflow-y-auto no-scroll pb-6"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ── VISTA CLIENTES ── -->
+<div id="view-clients" class="hidden w-full flex flex-col">
+    <div class="bg-white border-b border-slate-100 px-4 pt-4 pb-3 flex-shrink-0">
+        <div class="flex items-center justify-between mb-3">
+            <h1 class="text-base font-black text-slate-900 uppercase italic">Clientes</h1>
+            <span id="ct-badge" class="bg-blue-100 text-blue-700 text-[9px] font-black px-3 py-1 rounded-full uppercase">0 resultados</span>
+        </div>
+        <div class="flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-2 mb-3">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+            <input id="ct-search" type="text" placeholder="Buscar por nombre o código..." class="bg-transparent border-none outline-none text-sm font-semibold text-slate-700 w-full">
+        </div>
+        <div class="flex gap-2 overflow-x-auto no-scroll">
+            <select id="ct-zona"  onchange="filtrarTabla()" class="text-[10px] font-bold bg-slate-100 text-slate-600 px-3 py-2 rounded-xl outline-none flex-shrink-0 border-none"></select>
+            <select id="ct-ruta"  onchange="filtrarTabla()" class="text-[10px] font-bold bg-slate-100 text-slate-600 px-3 py-2 rounded-xl outline-none flex-shrink-0 border-none"></select>
+            <select id="ct-canal" onchange="filtrarTabla()" class="text-[10px] font-bold bg-slate-100 text-slate-600 px-3 py-2 rounded-xl outline-none flex-shrink-0 border-none"></select>
+            <select id="ct-tipo"  onchange="filtrarTabla()" class="text-[10px] font-bold bg-slate-100 text-slate-600 px-3 py-2 rounded-xl outline-none flex-shrink-0 border-none"></select>
+        </div>
+    </div>
+    <div id="ct" class="flex-1 overflow-y-auto no-scroll">
+        <table>
+            <thead><tr>
+                <th class="pl-4 text-left">#</th>
+                <th class="text-left">Nombre</th>
+                <th class="text-left">Cód</th>
+                <th class="text-left">Tipo</th>
+                <th class="text-left">Zona</th>
+                <th class="text-left">Canal</th>
+                <th class="text-center pr-4">Ir</th>
+            </tr></thead>
+            <tbody id="ct-tbody"></tbody>
+        </table>
+    </div>
+    <div class="flex-shrink-0 bg-white border-t border-slate-100 px-4 py-3 flex justify-between items-center">
+        <button id="ct-prev" onclick="cambiarPagina(-1)" class="text-[10px] font-black uppercase text-blue-600 px-4 py-2 bg-blue-50 rounded-xl">Anterior</button>
+        <span id="ct-pinfo" class="text-[10px] font-bold text-slate-400">Página 1 de 1</span>
+        <button id="ct-next" onclick="cambiarPagina(1)"  class="text-[10px] font-black uppercase text-blue-600 px-4 py-2 bg-blue-50 rounded-xl">Siguiente</button>
+    </div>
+</div>
+
+<!-- Filtros modal -->
+<div id="filter-modal" class="fixed inset-0 z-[5000] bg-slate-900/60 hidden flex items-end">
+    <div id="filter-inner" class="bg-white w-full rounded-t-[40px] p-8 translate-y-full transition-transform duration-300 relative max-h-[90vh] overflow-y-auto">
+        <div onclick="toggleFilters()" class="btn-close absolute top-[-20px] right-[20px] shadow-2xl"></div>
+        <div class="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-6"></div>
+        <h3 class="text-lg font-black text-slate-900 uppercase italic mb-6">Filtros Tácticos</h3>
+        <div class="space-y-4">
+            <select id="color-theme" onchange="renderMap()" class="w-full p-4 rounded-2xl bg-slate-100 font-bold text-slate-700 outline-none">
+                <option value="tipo">Tematizar por: Tipo</option>
+                <option value="canal">Tematizar por: Canal</option>
+                <option value="zona">Tematizar por: Zona</option>
+            </select>
+            <select id="f-zona"  class="w-full bg-slate-100 p-4 rounded-2xl font-bold text-slate-700"></select>
+            <select id="f-ruta"  class="w-full bg-slate-100 p-4 rounded-2xl font-bold text-slate-700"></select>
+            <select id="f-canal" class="w-full bg-slate-100 p-4 rounded-2xl font-bold text-slate-700"></select>
+        </div>
+        <div class="flex gap-4 mt-8">
+            <button onclick="resetFilters()" class="flex-1 py-4 font-black uppercase text-red-500 text-[10px]">Limpiar</button>
+            <button onclick="aplicarFiltros()" class="flex-[2] bg-blue-600 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg">Aplicar Filtros</button>
+        </div>
+    </div>
+</div>
+
+<!-- Tab bar -->
+<div class="tab-bar fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 z-[4000] flex justify-around items-center">
+    <button onclick="cambiarVista('map')"     id="tab-map"     class="flex flex-col items-center gap-1 text-blue-600 flex-1 py-2">
+        <i data-lucide="map-pin" class="w-5 h-5"></i>
+        <span class="text-[9px] font-black uppercase tracking-tighter">Mapa</span>
+    </button>
+    <button onclick="cambiarVista('clients')" id="tab-clients" class="flex flex-col items-center gap-1 text-slate-300 flex-1 py-2">
+        <i data-lucide="users" class="w-5 h-5"></i>
+        <span class="text-[9px] font-black uppercase tracking-tighter">Clientes</span>
+    </button>
+</div>
+
+<script>
+    // ── Estado ──────────────────────────────────────────────────
+    let map, markers, heatLayer, userMarker, canvasRenderer;
+    let allData = [], visibleData = [];
+    let heatOn = false;
+    let ctPage = 1, ctFiltered = [], ctTimer = null;
+    const PER_PAGE = 25;
+    const PALETTE  = ['#2563eb','#16a34a','#dc2626','#d97706','#7c3aed','#db2777','#0891b2'];
+
+    // ── Init ────────────────────────────────────────────────────
+    window.onload = async () => {
+        initMap();
+        lucide.createIcons();
+        await cargarDatos();
+        document.getElementById('loading').classList.add('hidden');
+    };
+
+    function initMap() {
+        map = L.map('map', { zoomControl:false, attributionControl:false }).setView([14.6,-90.5], 11);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
+        canvasRenderer = L.canvas({ padding: 0.5 });
+        markers = L.markerClusterGroup({
+            maxClusterRadius: 40,
+            chunkedLoading: true,
+            chunkInterval: 50,
+            iconCreateFunction: c => L.divIcon({
+                html:`<div>${c.getChildCount()}</div>`,
+                className:'cluster-custom', iconSize:L.point(35,35)
+            })
+        });
+        map.addLayer(markers);
+        map.on('locationfound', e => {
+            if (userMarker) map.removeLayer(userMarker);
+            userMarker = L.circleMarker(e.latlng, {radius:8, fillColor:'#2563eb', color:'white', weight:3, fillOpacity:1}).addTo(map);
+            map.setView(e.latlng, 15);
+        });
+    }
+
+    async function cargarDatos() {
+        try {
+            const res = await fetch('/api/clientes');
+            allData = await res.json();
+            visibleData = allData;
+            renderMap();
+            poblarFiltros();
+            poblarFiltrosTabla();
+        } catch (e) {
+            toast('Error al cargar datos del servidor');
+            console.error(e);
+        }
+    }
+
+    // ── Mapa ────────────────────────────────────────────────────
+    function valTema(item, tema) {
+        if (tema==='tipo')  return item.tipo_sucursal || 'N/A';
+        if (tema==='canal') return item.desc_canal || 'N/A';
+        if (tema==='zona')  return 'ZONA ' + item.cod_zona_actual;
+        return 'N/A';
+    }
+
+    function colorVal(val, tema) {
+        if (tema==='tipo') return (val||'').toLowerCase().includes('eco') ? '#16a34a' : '#2563eb';
+        let h=0; for (let i=0;i<val.length;i++) h=val.charCodeAt(i)+((h<<5)-h);
+        return PALETTE[Math.abs(h)%PALETTE.length];
+    }
+
+    function renderMap() {
+        markers.clearLayers();
+        const tema = document.getElementById('color-theme').value;
+        const heat = [];
+        const layers = [];
+        visibleData.forEach(item => {
+            const val   = valTema(item, tema);
+            const color = colorVal(val, tema);
+            const m = L.circleMarker([item.lat_num, item.lng_num], {
+                radius: 7, fillColor: color, color: 'white', weight: 1.5, fillOpacity: 0.9,
+                renderer: canvasRenderer
+            });
+            m._d = item;
+            m.on('click', showPopup);
+            layers.push(m);
+            heat.push([item.lat_num, item.lng_num, 0.5]);
+        });
+        markers.addLayers(layers);
+        document.getElementById('stat-total').innerText = visibleData.length;
+        if (heatLayer) map.removeLayer(heatLayer);
+        heatLayer = L.heatLayer(heat, {radius:25, blur:15});
+        if (heatOn) map.addLayer(heatLayer);
+        renderLeyendaUI();
+    }
+
+    function showPopup() {
+        const d = this._d;
+        this.bindPopup(`
+            <div class="flex flex-col text-[10px]">
+                <div class="p-4 bg-slate-800 text-white font-bold uppercase tracking-wide">${d.nom_cliente||''}</div>
+                <div class="p-4 space-y-2 bg-white">
+                    <p class="text-[12px] font-bold text-slate-800">ID: <span class="font-normal text-slate-500">${d.cod_cliente||'-'}</span></p>
+                    <p class="text-[12px] font-bold text-slate-800">TIPO: <span class="font-normal text-slate-500">${d.tipo_sucursal||'-'}</span></p>
+                    <p class="text-[12px] font-bold text-slate-800">CANAL: <span class="font-normal text-slate-500">${d.desc_canal||'-'}</span></p>
+                    <p class="text-[12px] font-bold text-slate-800">RUTA: <span class="text-blue-600 font-black">${d.cod_ruta_actual||'-'}</span></p>
+                    <p class="text-[12px] font-bold text-slate-800">ZONA: <span class="text-slate-900">${d.cod_zona_actual||'-'}</span></p>
+                </div>
+                <div class="grid grid-cols-2 gap-2 p-3 bg-slate-50 border-t border-slate-100">
+                    <a href="https://www.google.com/maps/dir/?api=1&destination=${d.lat_num},${d.lng_num}" target="_blank" class="bg-white py-2 text-center rounded-lg border border-slate-200 font-bold uppercase text-[9px] text-slate-600">Maps</a>
+                    <a href="https://waze.com/ul?ll=${d.lat_num},${d.lng_num}&navigate=yes" target="_blank" class="bg-[#33CCFF] text-white py-2 text-center rounded-lg font-bold uppercase text-[9px]">Waze</a>
+                </div>
+            </div>`).openPopup();
+    }
+
+    function renderLeyendaUI() {
+        const tema    = document.getElementById('color-theme').value;
+        const container = document.getElementById('legend-items');
+        container.innerHTML = '';
+        const counts = {};
+        visibleData.forEach(d => { const v=valTema(d,tema); counts[v]=(counts[v]||0)+1; });
+        const total = visibleData.length;
+        Object.keys(counts).sort((a,b)=>counts[b]-counts[a]).forEach(val => {
+            const color = colorVal(val, tema);
+            const pct   = total>0 ? ((counts[val]/total)*100).toFixed(1) : 0;
+            container.innerHTML += `
+                <div onclick="filtrarPorLeyenda('${val}')" class="p-4 bg-white rounded-2xl border border-slate-100 flex items-center justify-between shadow-sm active:bg-blue-50 cursor-pointer">
+                    <div class="flex items-center gap-3">
+                        <div class="w-3 h-3 rounded-full" style="background:${color}"></div>
+                        <div><span class="text-xs font-black text-slate-800 uppercase">${val}</span><br><span class="text-[10px] font-bold text-slate-400">${pct}% del total</span></div>
+                    </div>
+                    <div class="bg-blue-50 px-3 py-1 rounded-full"><span class="text-xs font-black text-blue-600">${counts[val]}</span></div>
+                </div>`;
+        });
+    }
+
+    function filtrarPorLeyenda(val) {
+        const tema = document.getElementById('color-theme').value;
+        visibleData = allData.filter(d => valTema(d,tema)===val);
+        renderMap(); toggleLegend(); resetView();
+        document.getElementById('map-search').value = val;
+        document.getElementById('btn-clear').classList.remove('hidden');
+        toast('MOSTRANDO: '+val);
+    }
+
+    function poblarFiltros() {
+        const u = key => [...new Set(allData.map(d=>String(d[key]||'')))].filter(x=>x).sort();
+        document.getElementById('f-zona').innerHTML  = '<option value="">Todas las Zonas</option>'   + u('cod_zona_actual').map(z=>`<option value="${z}">ZONA ${z}</option>`).join('');
+        document.getElementById('f-ruta').innerHTML  = '<option value="">Todas las Rutas</option>'   + u('cod_ruta_actual').map(r=>`<option value="${r}">RUTA ${r}</option>`).join('');
+        document.getElementById('f-canal').innerHTML = '<option value="">Todos los Canales</option>' + u('desc_canal').map(c=>`<option value="${c}">${c}</option>`).join('');
+    }
+
+    function aplicarFiltros() {
+        const z=document.getElementById('f-zona').value, r=document.getElementById('f-ruta').value, c=document.getElementById('f-canal').value;
+        visibleData = allData.filter(d =>
+            (!z || String(d.cod_zona_actual)===z) &&
+            (!r || String(d.cod_ruta_actual)===r) &&
+            (!c || d.desc_canal===c)
+        );
+        document.getElementById('filter-dot').classList.toggle('hidden', !z&&!r&&!c);
+        renderMap(); toggleFilters(); resetView();
+    }
+
+    function resetFilters() {
+        ['f-zona','f-ruta','f-canal'].forEach(id=>document.getElementById(id).value='');
+        aplicarFiltros();
+    }
+
+    function clearSearch() {
+        document.getElementById('map-search').value='';
+        document.getElementById('btn-clear').classList.add('hidden');
+        visibleData = allData; renderMap();
+    }
+
+    document.getElementById('map-search').addEventListener('input', e => {
+        const val = e.target.value.toLowerCase().trim();
+        document.getElementById('btn-clear').classList.toggle('hidden', !val);
+        const base = allData.filter(d=>(d.nom_cliente||'').toLowerCase().includes(val));
+        markers.clearLayers();
+        const tema=document.getElementById('color-theme').value;
+        const layers = [];
+        base.forEach(item => {
+            const color=colorVal(valTema(item,tema),tema);
+            const m = L.circleMarker([item.lat_num,item.lng_num],{radius:7,fillColor:color,color:'white',weight:1.5,fillOpacity:0.9,renderer:canvasRenderer});
+            m._d = item;
+            m.on('click', showPopup);
+            layers.push(m);
+        });
+        markers.addLayers(layers);
+        document.getElementById('stat-total').innerText=base.length;
+    });
+
+    function resetView() { if(markers.getLayers().length) map.fitBounds(markers.getBounds(),{padding:[50,50]}); }
+    function toggleHeat() {
+        heatOn=!heatOn;
+        const btn=document.getElementById('btn-heat');
+        if(heatOn){ map.removeLayer(markers); map.addLayer(heatLayer); btn.classList.add('on-heat'); toast('CALOR ACTIVADO'); }
+        else{ map.removeLayer(heatLayer); map.addLayer(markers); btn.classList.remove('on-heat'); toast('CALOR DESACTIVADO'); }
+    }
+    function toggleLegend() {
+        const m=document.getElementById('legend-panel'), c=document.getElementById('legend-inner');
+        if(m.classList.contains('hidden')){ renderLeyendaUI(); m.classList.remove('hidden'); setTimeout(()=>c.classList.remove('translate-y-full'),10); }
+        else{ c.classList.add('translate-y-full'); setTimeout(()=>m.classList.add('hidden'),300); }
+    }
+    function toggleFilters() {
+        const m=document.getElementById('filter-modal'), c=document.getElementById('filter-inner');
+        if(m.classList.contains('hidden')){ m.classList.remove('hidden'); setTimeout(()=>c.classList.remove('translate-y-full'),10); }
+        else{ c.classList.add('translate-y-full'); setTimeout(()=>m.classList.add('hidden'),300); }
+    }
+
+    // ── Tabla ────────────────────────────────────────────────────
+    function poblarFiltrosTabla() {
+        const u = key => [...new Set(allData.map(d=>String(d[key]||'')))].filter(x=>x).sort();
+        document.getElementById('ct-zona').innerHTML  = '<option value="">Todas las zonas</option>'   + u('cod_zona_actual').map(z=>`<option value="${z}">Zona ${z}</option>`).join('');
+        document.getElementById('ct-ruta').innerHTML  = '<option value="">Todas las rutas</option>'   + u('cod_ruta_actual').map(r=>`<option value="${r}">Ruta ${r}</option>`).join('');
+        document.getElementById('ct-canal').innerHTML = '<option value="">Todos los canales</option>' + u('desc_canal').map(c=>`<option value="${c}">${c}</option>`).join('');
+        document.getElementById('ct-tipo').innerHTML  = '<option value="">Todos los tipos</option>'   + u('tipo_sucursal').map(t=>`<option value="${t}">${t}</option>`).join('');
+        filtrarTabla();
+    }
+
+    function filtrarTabla() {
+        const s = (document.getElementById('ct-search').value||'').toLowerCase().trim();
+        const z = document.getElementById('ct-zona').value;
+        const r = document.getElementById('ct-ruta').value;
+        const c = document.getElementById('ct-canal').value;
+        const t = document.getElementById('ct-tipo').value;
+        ctFiltered = allData.filter(d =>
+            (!z || String(d.cod_zona_actual)===z) &&
+            (!r || String(d.cod_ruta_actual)===r) &&
+            (!c || d.desc_canal===c) &&
+            (!t || d.tipo_sucursal===t) &&
+            (!s || (d.nom_cliente||'').toLowerCase().includes(s) || String(d.cod_cliente||'').includes(s))
+        );
+        ctPage = 1; renderTabla();
+    }
+
+    function renderTabla() {
+        const start = (ctPage-1)*PER_PAGE;
+        const page  = ctFiltered.slice(start, start+PER_PAGE);
+        const pages = Math.max(1, Math.ceil(ctFiltered.length/PER_PAGE));
+        document.getElementById('ct-badge').textContent  = ctFiltered.length.toLocaleString()+' resultados';
+        document.getElementById('ct-pinfo').textContent  = 'Página '+ctPage+' de '+pages;
+        document.getElementById('ct-prev').disabled = ctPage<=1;
+        document.getElementById('ct-next').disabled = ctPage>=pages;
+        const tbody = document.getElementById('ct-tbody');
+        if (!page.length) { tbody.innerHTML='<tr><td colspan="7" class="text-center py-12 text-slate-400 text-xs font-bold">Sin resultados</td></tr>'; return; }
+        tbody.innerHTML = page.map((d,i) => {
+            const tipoBadge  = (d.tipo_sucursal||'').toLowerCase().includes('eco') ? 'b-green' : 'b-blue';
+            const canalBadge = (d.desc_canal||'').toLowerCase().includes('may') ? 'b-purple' : 'b-orange';
+            return `<tr>
+                <td class="pl-4 text-slate-400 font-bold text-[10px]">${start+i+1}</td>
+                <td class="font-semibold text-slate-700" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.nom_cliente||''}">${d.nom_cliente||'-'}</td>
+                <td class="text-slate-500 font-bold text-[10px]">${d.cod_cliente||'-'}</td>
+                <td><span class="badge ${tipoBadge}">${d.tipo_sucursal||'-'}</span></td>
+                <td><span class="badge b-slate">Z${d.cod_zona_actual||'-'}</span></td>
+                <td><span class="badge ${canalBadge}">${d.desc_canal||'-'}</span></td>
+                <td class="text-center pr-4">
+                    <button onclick="irAlMapa(${d.lat_num},${d.lng_num})" class="w-8 h-8 bg-blue-50 rounded-xl flex items-center justify-center mx-auto active:scale-90">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-blue-600"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+        lucide.createIcons();
+    }
+
+    function cambiarPagina(delta) {
+        const pages = Math.max(1, Math.ceil(ctFiltered.length/PER_PAGE));
+        const next  = ctPage+delta;
+        if (next<1||next>pages) return;
+        ctPage=next; renderTabla();
+    }
+
+    function irAlMapa(lat, lng) {
+        cambiarVista('map');
+        setTimeout(()=>{ map.setView([lat,lng],17); },350);
+    }
+
+    document.getElementById('ct-search').addEventListener('input', ()=>{
+        clearTimeout(ctTimer); ctTimer=setTimeout(()=>{ ctPage=1; filtrarTabla(); },200);
+    });
+
+    // ── Navegación ───────────────────────────────────────────────
+    function cambiarVista(v) {
+        document.getElementById('view-map').classList.toggle('hidden', v!=='map');
+        document.getElementById('view-clients').classList.toggle('hidden', v!=='clients');
+        ['map','clients'].forEach(x=>{
+            const t=document.getElementById('tab-'+x);
+            t.classList.toggle('text-blue-600', x===v);
+            t.classList.toggle('text-slate-300', x!==v);
+        });
+        if (v==='map') setTimeout(resetView,300);
+        if (v==='clients') { ctPage=1; filtrarTabla(); }
+        lucide.createIcons();
+    }
+
+    function toast(msg) {
+        const t=document.getElementById('toast'); t.innerText=msg; t.style.display='block';
+        setTimeout(()=>t.style.display='none',2000);
+    }
+</script>
+</body>
+</html>

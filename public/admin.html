@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoAnalítica — Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .upload-zone { border: 2px dashed #334155; border-radius: 20px; transition: all .2s; }
+        .upload-zone:hover, .upload-zone.drag-over { border-color: #3b82f6; background: #1e3a5f22; }
+        .col-badge { display:inline-flex; align-items:center; gap:4px; font-size:9px; font-weight:900; padding:4px 10px; border-radius:9999px; }
+        .col-ok  { background:#16a34a22; color:#4ade80; }
+        .col-err { background:#dc262622; color:#f87171; }
+        #preview-table th { font-size:8px; font-weight:900; text-transform:uppercase; padding:6px 8px; background:#1e293b; color:#64748b; white-space:nowrap; }
+        #preview-table td { font-size:9px; padding:5px 8px; border-bottom:1px solid #1e293b; white-space:nowrap; color:#cbd5e1; }
+    </style>
+</head>
+<body class="bg-slate-900 min-h-screen text-white">
+
+    <!-- Navbar -->
+    <nav class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center">
+                <i data-lucide="map-pin" class="w-4 h-4"></i>
+            </div>
+            <div>
+                <h1 class="font-black text-sm uppercase tracking-tight">GeoAnalítica Táctica</h1>
+                <p class="text-[9px] text-slate-400 font-bold uppercase">Panel de Administración</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="/supervisor" target="_blank"
+               class="text-[10px] font-black uppercase text-blue-400 bg-blue-500/10 px-3 py-2 rounded-xl flex items-center gap-2 hover:bg-blue-500/20 transition-colors">
+                <i data-lucide="map" class="w-3 h-3"></i> Ver Mapa
+            </a>
+            <button onclick="cerrarSesion()"
+                class="text-[10px] font-black uppercase text-slate-400 bg-slate-700 px-3 py-2 rounded-xl flex items-center gap-2 hover:bg-red-500/20 hover:text-red-400 transition-colors">
+                <i data-lucide="log-out" class="w-3 h-3"></i> Salir
+            </button>
+        </div>
+    </nav>
+
+    <div class="max-w-2xl mx-auto p-6 pb-16">
+
+        <!-- Estado A: Upload -->
+        <div id="state-upload">
+            <!-- Stats rápidas -->
+            <div id="stats-bar" class="grid grid-cols-3 gap-3 mb-6 hidden">
+                <div class="bg-slate-800 rounded-2xl p-4 border border-slate-700 text-center">
+                    <p class="text-2xl font-black text-blue-400" id="st-total">0</p>
+                    <p class="text-[9px] font-bold text-slate-500 uppercase mt-1">Clientes</p>
+                </div>
+                <div class="bg-slate-800 rounded-2xl p-4 border border-slate-700 text-center">
+                    <p class="text-2xl font-black text-green-400" id="st-zonas">0</p>
+                    <p class="text-[9px] font-bold text-slate-500 uppercase mt-1">Zonas</p>
+                </div>
+                <div class="bg-slate-800 rounded-2xl p-4 border border-slate-700 text-center">
+                    <p class="text-2xl font-black text-purple-400" id="st-rutas">0</p>
+                    <p class="text-[9px] font-bold text-slate-500 uppercase mt-1">Rutas</p>
+                </div>
+            </div>
+
+            <!-- Ultima importación -->
+            <div id="ultima-import" class="hidden bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 mb-5 flex items-center gap-3">
+                <i data-lucide="database" class="w-5 h-5 text-blue-400 flex-shrink-0"></i>
+                <div>
+                    <p class="text-[10px] font-black text-blue-300 uppercase" id="ui-label"></p>
+                    <p class="text-[9px] text-blue-500 font-bold" id="ui-fecha"></p>
+                </div>
+            </div>
+
+            <!-- Zona de upload -->
+            <div class="bg-slate-800 rounded-3xl p-6 border border-slate-700 mb-4">
+                <h2 class="font-black text-sm uppercase text-slate-200 mb-5">
+                    <i data-lucide="upload-cloud" class="w-4 h-4 inline mr-2 text-blue-400"></i>
+                    Subir Base de Clientes
+                </h2>
+                <input type="file" id="file-input" accept=".xlsx,.xls,.csv" class="hidden">
+                <div id="upload-zone" class="upload-zone p-10 flex flex-col items-center cursor-pointer text-center"
+                     onclick="document.getElementById('file-input').click()">
+                    <i data-lucide="file-spreadsheet" class="w-14 h-14 text-slate-600 mb-3"></i>
+                    <span class="font-black text-slate-300 uppercase text-sm mb-1">Arrastrar o hacer clic</span>
+                    <span class="text-[10px] text-slate-500 font-bold">Formatos: .xlsx · .xls · .csv — Máx 50 MB</span>
+                </div>
+                <div class="mt-5">
+                    <p class="text-[10px] font-black uppercase text-slate-500 mb-3">Columnas esperadas en el archivo</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-[9px] font-bold bg-blue-500/20 text-blue-400 px-2 py-1 rounded-lg">lat_num ★</span>
+                        <span class="text-[9px] font-bold bg-blue-500/20 text-blue-400 px-2 py-1 rounded-lg">lng_num ★</span>
+                        <span class="text-[9px] font-bold bg-slate-700 text-slate-400 px-2 py-1 rounded-lg">nom_cliente</span>
+                        <span class="text-[9px] font-bold bg-slate-700 text-slate-400 px-2 py-1 rounded-lg">cod_cliente</span>
+                        <span class="text-[9px] font-bold bg-slate-700 text-slate-400 px-2 py-1 rounded-lg">tipo_sucursal</span>
+                        <span class="text-[9px] font-bold bg-slate-700 text-slate-400 px-2 py-1 rounded-lg">cod_zona_actual</span>
+                        <span class="text-[9px] font-bold bg-slate-700 text-slate-400 px-2 py-1 rounded-lg">cod_ruta_actual</span>
+                        <span class="text-[9px] font-bold bg-slate-700 text-slate-400 px-2 py-1 rounded-lg">desc_canal</span>
+                    </div>
+                    <p class="text-[9px] text-slate-600 mt-2">★ Requeridas. Se detectan variantes: latitud/lat/latitude · longitud/lng/longitude</p>
+                </div>
+            </div>
+
+            <button onclick="confirmarBorrado()"
+                class="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 py-3 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-colors">
+                <i data-lucide="trash-2" class="w-4 h-4"></i> Borrar todos los clientes de la base de datos
+            </button>
+        </div>
+
+        <!-- Estado B: Preview -->
+        <div id="state-preview" class="hidden">
+            <div class="bg-slate-800 rounded-3xl border border-slate-700 overflow-hidden mb-5">
+                <!-- Header del preview -->
+                <div class="p-5 border-b border-slate-700">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase mb-1" id="prev-filename"></p>
+                    <h2 class="font-black text-slate-200 uppercase text-sm mb-4">Resumen del Archivo</h2>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="bg-slate-700/50 rounded-xl p-3 text-center">
+                            <p class="text-xl font-black text-white" id="prev-total">0</p>
+                            <p class="text-[9px] font-bold text-slate-500 uppercase mt-1">Total</p>
+                        </div>
+                        <div class="bg-green-500/10 rounded-xl p-3 text-center border border-green-500/20">
+                            <p class="text-xl font-black text-green-400" id="prev-valid">0</p>
+                            <p class="text-[9px] font-bold text-slate-500 uppercase mt-1">Válidas</p>
+                        </div>
+                        <div class="bg-red-500/10 rounded-xl p-3 text-center border border-red-500/20">
+                            <p class="text-xl font-black text-red-400" id="prev-invalid">0</p>
+                            <p class="text-[9px] font-bold text-slate-500 uppercase mt-1">Sin coords</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columnas detectadas -->
+                <div class="p-5 border-b border-slate-700">
+                    <h3 class="font-black text-slate-400 uppercase text-[10px] mb-3">Columnas Detectadas</h3>
+                    <div id="prev-cols" class="flex flex-wrap gap-2"></div>
+                </div>
+
+                <!-- Mini tabla -->
+                <div class="p-5">
+                    <h3 class="font-black text-slate-400 uppercase text-[10px] mb-3">Vista Previa — primeras 5 filas</h3>
+                    <div class="overflow-x-auto rounded-xl border border-slate-700">
+                        <table id="preview-table" class="w-full">
+                            <thead id="prev-thead"></thead>
+                            <tbody id="prev-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="cancelarPreview()"
+                    class="flex-1 py-4 font-black uppercase text-slate-400 text-[10px] bg-slate-800 rounded-2xl border border-slate-700 hover:bg-slate-700 transition-colors">
+                    Cancelar
+                </button>
+                <button onclick="confirmarImport()"
+                    class="flex-[2] bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black uppercase text-xs shadow-lg flex items-center justify-center gap-2 transition-colors">
+                    <i data-lucide="check-circle" class="w-4 h-4"></i> Confirmar e Importar
+                </button>
+            </div>
+        </div>
+
+        <!-- Estado C: Éxito -->
+        <div id="state-success" class="hidden">
+            <div class="bg-slate-800 rounded-3xl border border-slate-700 overflow-hidden mb-5">
+                <div class="p-6 bg-gradient-to-br from-blue-700 to-blue-800">
+                    <div class="flex items-center gap-3 mb-2">
+                        <i data-lucide="check-circle" class="w-10 h-10 text-blue-200"></i>
+                        <div>
+                            <p class="font-black text-2xl" id="suc-total">0</p>
+                            <p class="text-blue-300 text-[10px] font-bold" id="suc-fecha"></p>
+                        </div>
+                    </div>
+                    <p class="text-blue-300 text-[10px] font-bold mt-1" id="suc-file"></p>
+                </div>
+                <div class="grid grid-cols-3 divide-x divide-slate-700 border-t border-slate-700">
+                    <div class="p-4 text-center">
+                        <p class="font-black text-white text-xl" id="suc-zonas">0</p>
+                        <p class="text-[9px] font-bold text-slate-500 uppercase">Zonas</p>
+                    </div>
+                    <div class="p-4 text-center">
+                        <p class="font-black text-white text-xl" id="suc-rutas">0</p>
+                        <p class="text-[9px] font-bold text-slate-500 uppercase">Rutas</p>
+                    </div>
+                    <div class="p-4 text-center">
+                        <p class="font-black text-white text-xl" id="suc-canales">0</p>
+                        <p class="text-[9px] font-bold text-slate-500 uppercase">Canales</p>
+                    </div>
+                </div>
+            </div>
+            <button onclick="mostrarEstado('upload')"
+                class="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 py-4 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-colors mb-3">
+                <i data-lucide="upload-cloud" class="w-4 h-4"></i> Reimportar otro archivo
+            </button>
+            <button onclick="confirmarBorrado()"
+                class="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 py-3 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-colors">
+                <i data-lucide="trash-2" class="w-4 h-4"></i> Borrar base de datos
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="overlay" class="fixed inset-0 z-50 bg-slate-900/80 hidden flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-slate-800 p-8 rounded-3xl flex flex-col items-center border border-slate-700 max-w-md">
+            <div class="animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent mb-4"></div>
+            <p class="text-[11px] font-black uppercase text-slate-300 mb-2" id="overlay-msg">Procesando...</p>
+            <p class="text-[9px] text-slate-500 text-center mb-3" id="overlay-detail">Por favor espere, no cierre esta ventana...</p>
+            <div class="w-full bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                <div id="progress-bar" class="bg-blue-600 h-full w-0 transition-all"></div>
+            </div>
+            <p class="text-[8px] text-slate-500 mt-2" id="overlay-percent">0%</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script>
+        const token = localStorage.getItem('geo_token');
+        if (!token) window.location.replace('/login');
+
+        lucide.createIcons();
+
+        const REQUIRED_COLS = {
+            nom_cliente:      ['nom_cliente','nombre','cliente','name'],
+            cod_cliente:      ['cod_cliente','codigo','id','code'],
+            lat_num:          ['lat_num','latitud','lat','latitude'],
+            lng_num:          ['lng_num','longitud','lng','longitude','long'],
+            tipo_sucursal:    ['tipo_sucursal','tipo','sucursal'],
+            cod_zona_actual:  ['cod_zona_actual','zona','zone'],
+            cod_ruta_actual:  ['cod_ruta_actual','ruta','route'],
+            desc_canal:       ['desc_canal','canal','channel']
+        };
+
+        let archivoSeleccionado = null;
+
+        // ── Cargar stats al iniciar ────────────────────────────────
+        async function cargarStats() {
+            try {
+                const res  = await fetch('/api/clientes/stats');
+                const data = await res.json();
+                if (!data.stats || parseInt(data.stats.total) === 0) return;
+
+                document.getElementById('st-total').textContent = parseInt(data.stats.total).toLocaleString();
+                document.getElementById('st-zonas').textContent = data.stats.zonas;
+                document.getElementById('st-rutas').textContent = data.stats.rutas;
+                document.getElementById('stats-bar').classList.remove('hidden');
+
+                if (data.ultimaImport) {
+                    const fecha = new Date(data.ultimaImport.creado_en);
+                    const fStr  = fecha.toLocaleDateString('es-GT') + ' ' + fecha.toLocaleTimeString('es-GT', { hour:'2-digit', minute:'2-digit' });
+                    document.getElementById('ui-label').textContent = data.stats.total + ' clientes activos en la base de datos';
+                    document.getElementById('ui-fecha').textContent = 'Última actualización: ' + fStr + ' · ' + (data.ultimaImport.nombre_archivo || '');
+                    document.getElementById('ultima-import').classList.remove('hidden');
+                }
+            } catch (e) { console.warn('No se pudieron cargar stats:', e.message); }
+        }
+        cargarStats();
+
+        // ── Upload zone ────────────────────────────────────────────
+        const zone = document.getElementById('upload-zone');
+        zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+        zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); procesarArchivo(e.dataTransfer.files[0]); });
+
+        document.getElementById('file-input').addEventListener('change', function() {
+            if (this.files[0]) procesarArchivo(this.files[0]);
+            this.value = '';
+        });
+
+        function procesarArchivo(file) {
+            if (!file) return;
+            archivoSeleccionado = file;
+            mostrarOverlay('Leyendo archivo...');
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const wb   = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                    const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+
+                    if (!json.length) { ocultarOverlay(); alert('El archivo está vacío'); return; }
+
+                    const headers = Object.keys(json[0]);
+                    const matched = {};
+                    const missing = [];
+
+                    for (const [field, aliases] of Object.entries(REQUIRED_COLS)) {
+                        const found = headers.find(h => aliases.includes(h.toLowerCase().trim()));
+                        if (found) matched[field] = found;
+                        else if (field === 'lat_num' || field === 'lng_num') missing.push(field);
+                    }
+
+                    if (missing.length) {
+                        ocultarOverlay();
+                        alert('No se encontraron columnas de coordenadas: ' + missing.join(', ') + '\n\nVariantes aceptadas: lat_num, latitud, lat, lng_num, longitud, lng');
+                        return;
+                    }
+
+                    const parsed = json.map(r => ({
+                        lat_num: parseFloat(String(r[matched.lat_num] || '').replace(',', '.')),
+                        lng_num: parseFloat(String(r[matched.lng_num] || '').replace(',', '.'))
+                    })).filter(d => !isNaN(d.lat_num) && !isNaN(d.lng_num));
+
+                    const invalidas = json.length - parsed.length;
+
+                    // Llenar preview
+                    document.getElementById('prev-filename').textContent = '📄 ' + file.name;
+                    document.getElementById('prev-total').textContent   = json.length.toLocaleString();
+                    document.getElementById('prev-valid').textContent   = parsed.length.toLocaleString();
+                    document.getElementById('prev-invalid').textContent = invalidas.toLocaleString();
+
+                    const colsEl = document.getElementById('prev-cols');
+                    colsEl.innerHTML = '';
+                    for (const [field] of Object.entries(REQUIRED_COLS)) {
+                        const ok  = !!matched[field];
+                        const cls = ok ? 'col-ok' : 'col-err';
+                        colsEl.innerHTML += `<span class="col-badge ${cls}">${ok ? '✓' : '✗'} ${field}</span>`;
+                    }
+
+                    const prevCols = headers.slice(0, 6);
+                    document.getElementById('prev-thead').innerHTML = '<tr>' + prevCols.map(h => `<th>${h}</th>`).join('') + '</tr>';
+                    document.getElementById('prev-tbody').innerHTML = json.slice(0, 5).map(r =>
+                        '<tr>' + prevCols.map(h => `<td title="${r[h]}">${String(r[h]).slice(0, 20)}</td>`).join('') + '</tr>'
+                    ).join('');
+
+                    ocultarOverlay();
+                    mostrarEstado('preview');
+                    lucide.createIcons();
+                } catch (err) {
+                    ocultarOverlay();
+                    alert('Error al leer el archivo: ' + err.message);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // ── Confirmar import — envía al backend ───────────────────
+        async function confirmarImport() {
+            if (!archivoSeleccionado) return;
+
+            const fileSizeMB = (archivoSeleccionado.size / 1024 / 1024).toFixed(2);
+            mostrarOverlay(`Cargando ${fileSizeMB}MB a la base de datos...`, `Esta puede tomar varios minutos con archivos grandes. La barra de progreso se actualiza cada 10 segundos.`);
+
+            const form = new FormData();
+            form.append('archivo', archivoSeleccionado);
+
+            // Simular progreso mientras se procesa (el servidor tardará varios minutos)
+            let progressSteps = 0;
+            const progressInterval = setInterval(() => {
+                if (progressSteps < 90) {
+                    progressSteps += Math.random() * 20;
+                    actualizarProgress(Math.min(progressSteps, 85));
+                    document.getElementById('overlay-detail').textContent = `Procesando en el servidor... (${Math.round(progressSteps)}%)`;
+                }
+            }, 5000);
+
+            try {
+                // Usar un timeout muy largo para archivos grandes (30 minutos)
+                const controller = new AbortController();
+                const timeoutMs = Math.max(600000, archivoSeleccionado.size / 1024); // mín 10min, + 1ms por KB
+                const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+                const res = await fetch('/api/upload', {
+                    method:  'POST',
+                    headers: { Authorization: 'Bearer ' + token },
+                    body:    form,
+                    signal:  controller.signal
+                });
+
+                clearTimeout(timeout);
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || `Error ${res.status}: ${res.statusText}`);
+                }
+
+                const data = await res.json();
+                actualizarProgress(90);
+                document.getElementById('overlay-detail').textContent = 'Cargando estadísticas de la base de datos...';
+
+                // Cargar stats reales desde DB para el resumen
+                const statsRes = await fetch('/api/clientes/stats');
+                const statsData = await statsRes.json();
+
+                document.getElementById('suc-total').textContent   = data.validas.toLocaleString() + ' clientes importados';
+                document.getElementById('suc-fecha').textContent   = 'Importado el ' + new Date().toLocaleDateString('es-GT') + ' a las ' + new Date().toLocaleTimeString('es-GT', {hour:'2-digit',minute:'2-digit'});
+                document.getElementById('suc-file').textContent    = '📄 ' + data.archivo;
+                document.getElementById('suc-zonas').textContent   = statsData.stats?.zonas   || 0;
+                document.getElementById('suc-rutas').textContent   = statsData.stats?.rutas   || 0;
+                document.getElementById('suc-canales').textContent = statsData.stats?.canales || 0;
+
+                actualizarProgress(100);
+                setTimeout(() => {
+                    archivoSeleccionado = null;
+                    clearInterval(progressInterval);
+                    ocultarOverlay();
+                    mostrarEstado('success');
+                    lucide.createIcons();
+                    cargarStats();
+                }, 800);
+
+            } catch (err) {
+                clearInterval(progressInterval);
+                ocultarOverlay();
+
+                if (err.name === 'AbortError') {
+                    alert('⏱️ Timeout: La carga tardó demasiado.\n\nPosibles causas:\n• Conexión lenta a la base de datos\n• Archivo muy grande\n• Base de datos ocupada\n\nInténtelo de nuevo o divida el archivo en partes.');
+                } else {
+                    alert('❌ Error: ' + err.message);
+                }
+                console.error('[UPLOAD] Error:', err);
+            }
+        }
+
+        function actualizarProgress(pct) {
+            pct = Math.min(100, Math.max(0, pct));
+            document.getElementById('progress-bar').style.width = pct + '%';
+            document.getElementById('overlay-percent').textContent = Math.round(pct) + '%';
+        }
+
+        function cancelarPreview() {
+            archivoSeleccionado = null;
+            mostrarEstado('upload');
+        }
+
+        async function confirmarBorrado() {
+            if (!confirm('¿Borrar TODOS los clientes de la base de datos?\n\nEsta acción no se puede deshacer.')) return;
+            mostrarOverlay('Borrando...');
+            try {
+                const res = await fetch('/api/clientes/borrar', {
+                    method:  'DELETE',
+                    headers: { Authorization: 'Bearer ' + token }
+                });
+                ocultarOverlay();
+                if (res.ok) { alert('Base de datos borrada'); window.location.reload(); }
+                else { const d = await res.json(); alert('Error: ' + d.error); }
+            } catch (err) { ocultarOverlay(); alert('Error: ' + err.message); }
+        }
+
+        function mostrarEstado(s) {
+            ['upload','preview','success'].forEach(x => document.getElementById('state-' + x).classList.toggle('hidden', x !== s));
+        }
+
+        function mostrarOverlay(msg, detail = '') {
+            document.getElementById('overlay-msg').textContent = msg;
+            document.getElementById('overlay-detail').textContent = detail || 'Por favor espere, no cierre esta ventana...';
+            document.getElementById('overlay').classList.remove('hidden');
+            actualizarProgress(0);
+        }
+        function ocultarOverlay() { document.getElementById('overlay').classList.add('hidden'); }
+
+        function cerrarSesion() {
+            localStorage.removeItem('geo_token');
+            localStorage.removeItem('geo_usuario');
+            window.location.replace('/login');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoAnalítica — Acceso</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 min-h-screen flex items-center justify-center p-4">
+
+    <div class="w-full max-w-sm">
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-blue-900/50">
+                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-black text-white uppercase tracking-tight">GeoAnalítica</h1>
+            <p class="text-slate-400 text-sm font-bold mt-1">Panel de Administración</p>
+        </div>
+
+        <div class="bg-slate-800 rounded-3xl p-8 shadow-2xl border border-slate-700">
+            <div id="error-msg" class="hidden bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold p-3 rounded-xl mb-5 text-center uppercase"></div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Usuario</label>
+                    <input id="usuario" type="text" placeholder="admin" autocomplete="username"
+                        class="w-full bg-slate-700 text-white font-bold rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500 text-sm border border-slate-600">
+                </div>
+                <div>
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Contraseña</label>
+                    <input id="clave" type="password" placeholder="••••••••" autocomplete="current-password"
+                        class="w-full bg-slate-700 text-white font-bold rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-500 text-sm border border-slate-600">
+                </div>
+            </div>
+
+            <button id="btn-login" onclick="iniciarSesion()"
+                class="w-full mt-6 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-black uppercase tracking-wider py-4 rounded-2xl transition-all shadow-lg shadow-blue-900/30 text-sm">
+                Ingresar
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Si ya tiene sesión válida, redirigir
+        const token = localStorage.getItem('geo_token');
+        if (token) {
+            fetch('/api/auth/verificar', { headers: { Authorization: 'Bearer ' + token } })
+                .then(r => r.ok ? window.location.replace('/admin') : null)
+                .catch(() => {});
+        }
+
+        document.getElementById('clave').addEventListener('keydown', e => {
+            if (e.key === 'Enter') iniciarSesion();
+        });
+
+        async function iniciarSesion() {
+            const btn     = document.getElementById('btn-login');
+            const errEl   = document.getElementById('error-msg');
+            const usuario = document.getElementById('usuario').value.trim();
+            const clave   = document.getElementById('clave').value;
+
+            errEl.classList.add('hidden');
+            if (!usuario || !clave) { mostrarError('Completa todos los campos'); return; }
+
+            btn.disabled = true;
+            btn.textContent = 'Verificando...';
+
+            try {
+                const res  = await fetch('/api/auth/login', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ usuario, clave })
+                });
+                const data = await res.json();
+
+                if (!res.ok) { mostrarError(data.error || 'Error de autenticación'); return; }
+
+                localStorage.setItem('geo_token', data.token);
+                localStorage.setItem('geo_usuario', data.usuario);
+                window.location.replace('/admin');
+            } catch {
+                mostrarError('No se pudo conectar al servidor');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Ingresar';
+            }
+        }
+
+        function mostrarError(msg) {
+            const el = document.getElementById('error-msg');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
